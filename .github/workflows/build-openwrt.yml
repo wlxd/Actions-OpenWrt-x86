@@ -138,7 +138,7 @@ jobs:
           sed -i '/download-ci-llvm/ s/true/false/g' feeds/packages/lang/rust/Makefile
         fi
         
-        # 2. 物理剔除 ksmbd 极其捆绑小弟
+        # 2. 物理剔除 ksmbd 及其捆绑小弟
         rm -rf package/kernel/ksmbd
         rm -rf feeds/packages/net/ksmbd-tools
         find feeds package -name "luci-app-ksmbd" -type d -exec rm -rf {} +
@@ -148,10 +148,15 @@ jobs:
         sed -i 's/CONFIG_PACKAGE_luci-app-ksmbd=y/# CONFIG_PACKAGE_luci-app-ksmbd is not set/g' .config
         sed -i 's/CONFIG_PACKAGE_ksmbd-server=y/# CONFIG_PACKAGE_ksmbd-server is not set/g' .config
         sed -i 's/CONFIG_PACKAGE_autosamba=y/# CONFIG_PACKAGE_autosamba is not set/g' .config
-        
         echo "CONFIG_PACKAGE_luci-app-samba4=y" >> .config
         echo "CONFIG_PACKAGE_samba4-libs=y" >> .config
         echo "CONFIG_PACKAGE_samba4-server=y" >> .config
+        
+        # 4. ☢️ 物理剔除与 ccache 致命冲突的 vlmcsd (KMS 激活服务器)
+        find feeds package -name "luci-app-vlmcsd" -type d -exec rm -rf {} +
+        find feeds package -name "vlmcsd" -type d -exec rm -rf {} +
+        sed -i 's/CONFIG_PACKAGE_luci-app-vlmcsd=y/# CONFIG_PACKAGE_luci-app-vlmcsd is not set/g' .config
+        sed -i 's/CONFIG_PACKAGE_vlmcsd=y/# CONFIG_PACKAGE_vlmcsd is not set/g' .config
         
         make defconfig
         make download -j8
