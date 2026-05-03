@@ -39,13 +39,11 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-    # 1. 检出你自己的仓库文件到一个单独的文件夹
     - name: Checkout main-repo
       uses: actions/checkout@v4
       with:
         path: main-repo
 
-    # 2. 暴力清理系统根目录空间（释放约 30G+）
     - name: Free Disk Space (Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
@@ -55,13 +53,11 @@ jobs:
         haskell: true
         large-packages: true
         docker-images: true
-        swap-storage: false  # 必须设为 false 以保留 Swap 避免内存溢出
+        swap-storage: false
 
-    # 3. 检查清理后的真实可用空间
     - name: Check free space
       run: df -hT
 
-    # 4. 初始化编译环境（此时根目录空间充足，不会再报错）
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -71,19 +67,15 @@ jobs:
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
 
-    # 5. 克隆 OpenWrt 源码（直接拉取到默认工作区即可）
     - name: Clone source code
       run: git clone $REPO_URL -b $REPO_BRANCH openwrt
 
-    # 6. 设置编译缓存
     - name: Cache
       uses: klever1988/cachewrtbuild@main
       with:
         ccache: 'true'
         clean: 'false'
         prefix: ${{ github.workspace }}/openwrt
-
-    # --- 以下所有针对源码的操作，均在 openwrt 目录下进行 ---
 
     - name: Install custom packages
       working-directory: openwrt
@@ -141,19 +133,18 @@ jobs:
         cd openwrt
         echo -e 'CONFIG_DEVEL=y\nCONFIG_CCACHE=y' >> .config
         
-        # 1. 防 Rust 404 代码保留
+        # 1. 防 Rust 404
         if [ -f feeds/packages/lang/rust/Makefile ]; then
           sed -i '/download-ci-llvm/ s/true/false/g' feeds/packages/lang/rust/Makefile
         fi
         
-        # 2. ☢️ 物理剔除 ksmbd 及其所有的捆绑小弟
+        # 2. 物理剔除 ksmbd 极其捆绑小弟
         rm -rf package/kernel/ksmbd
         rm -rf feeds/packages/net/ksmbd-tools
-        # 使用 find 命令全目录地毯式搜索并删除 autosamba 和 luci-app-ksmbd，防止 Lean 调整目录
         find feeds package -name "luci-app-ksmbd" -type d -exec rm -rf {} +
         find feeds package -name "autosamba" -type d -exec rm -rf {} +
         
-        # 3. 清理 .config 中的遗留残留，并强制启用稳定的 samba4
+        # 3. 强制切换 samba4
         sed -i 's/CONFIG_PACKAGE_luci-app-ksmbd=y/# CONFIG_PACKAGE_luci-app-ksmbd is not set/g' .config
         sed -i 's/CONFIG_PACKAGE_ksmbd-server=y/# CONFIG_PACKAGE_ksmbd-server is not set/g' .config
         sed -i 's/CONFIG_PACKAGE_autosamba=y/# CONFIG_PACKAGE_autosamba is not set/g' .config
@@ -189,15 +180,17 @@ jobs:
         name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
 
+    # 【核心修复点开始】：给所有的后续动作加装 success 编译成功校验锁
     - name: Run rename.sh
       working-directory: openwrt
+      if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         bash ../main-repo/rename.sh
 
     - name: Organize files
       working-directory: openwrt
       id: organize
-      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
         cd bin/targets/*/*
         rm -rf packages
@@ -214,7 +207,7 @@ jobs:
     - name: Generate release tag
       working-directory: openwrt
       id: tag
-      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         touch release.txt
         [ -f wget/op_version1 ] && echo "release_tag=$(cat wget/op_version1)" >> $GITHUB_OUTPUT || echo "release_tag=OpenWrt_${{ env.FILE_DATE }}" >> $GITHUB_OUTPUT
@@ -241,6 +234,7 @@ jobs:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: openwrt/release.txt
         files: ${{ env.FIRMWARE }}/*
+    # 【核心修复点结束】
 
     - name: Delete workflow runs
       uses: Lenyu2020/delete-workflow-runs@main
