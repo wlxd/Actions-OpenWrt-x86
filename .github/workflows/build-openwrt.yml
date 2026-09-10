@@ -135,13 +135,15 @@ jobs:
           sed -i '/download-ci-llvm/ s/true/false/g' feeds/packages/lang/rust/Makefile
         fi
 
-        # gettext-full host：必须是 C 字符串，否则 relocate(/usr/...) 会在 '/' 处语法错误
+        # 修复 gettext-full host 预处理器 BISON_LOCALEDIR 引号被剥离导致的宏语法错误
         GETTEXT_MK="package/libs/gettext-full/Makefile"
         if [ -f "$GETTEXT_MK" ]; then
-          sed -i '/HOST_CFLAGS += -DBISON_LOCALEDIR/d' "$GETTEXT_MK"
-          sed -i 's|^HOST_CFLAGS += $(HOST_FPIC)$|&\nHOST_CFLAGS += -DBISON_LOCALEDIR='\''"/usr/share/locale"'\''|' "$GETTEXT_MK"
+          sed -i '/BISON_LOCALEDIR/d' "$GETTEXT_MK"
+          echo 'HOST_CFLAGS += -DBISON_LOCALEDIR=\"/usr/share/locale\"' >> "$GETTEXT_MK"
+          echo 'TARGET_CFLAGS += -DBISON_LOCALEDIR=\"/usr/share/locale\"' >> "$GETTEXT_MK"
         fi
         rm -rf build_dir/hostpkg/gettext-*
+        rm -rf build_dir/target-*/gettext-*
         rm -f staging_dir/host/share/aclocal/bison-i18n.m4
         
         # 2. 物理剔除 ksmbd / vlmcsd（只改 config 不够，feeds 仍可能装回来）
