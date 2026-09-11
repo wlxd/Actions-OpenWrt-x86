@@ -153,8 +153,7 @@ jobs:
         find feeds package -name "autosamba" -type d -exec rm -rf {} +
         find feeds package -name "luci-app-vlmcsd" -type d -exec rm -rf {} +
         find feeds package -name "vlmcsd" -type d -exec rm -rf {} +
-        # ruby / node：只关 CONFIG 不够。任意 ruby-* 子包仍会编译整个 ruby；NODEJS_22=y 会把 node 拉回来
-        rm -rf feeds/packages/lang/ruby
+        # node 可以整包剔除；ruby 不能删：luci-app-openclash 硬依赖 ruby + ruby-yaml
         rm -rf feeds/packages/lang/node
 
         make defconfig
@@ -182,8 +181,6 @@ jobs:
         disable_pkg PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server
         disable_pkg PACKAGE_v2ray-core
         disable_pkg PACKAGE_vim-full
-        disable_pkg PACKAGE_ruby
-        disable_pkg PACKAGE_libruby
         disable_pkg PACKAGE_node
         disable_pkg PACKAGE_node-npm
         disable_pkg PACKAGE_luci-app-samba4
@@ -218,8 +215,12 @@ jobs:
         enable_pkg PACKAGE_kmod-nft-nat
         enable_pkg PACKAGE_iptables-mod-tproxy
         enable_pkg PACKAGE_iptables-zz-legacy
-        # 关掉所有 ruby-* / node-* 子包（只关本体时，ruby-yaml 仍会整包编译）
-        grep -E '^CONFIG_PACKAGE_(ruby|node)[^=]*=y' .config | sed 's/=y//' | sed 's/^CONFIG_//' | while read -r k; do
+        enable_pkg PACKAGE_luci-app-openclash
+        enable_pkg PACKAGE_ruby
+        enable_pkg PACKAGE_libruby
+        enable_pkg PACKAGE_ruby-yaml
+        # 只关 node 子包，保留 OpenClash 所需的 ruby
+        grep -E '^CONFIG_PACKAGE_node[^=]*=y' .config | sed 's/=y//' | sed 's/^CONFIG_//' | while read -r k; do
           disable_pkg "$k"
         done
         sed -i 's/^CONFIG_NODEJS_22=y/# CONFIG_NODEJS_22 is not set/' .config || true
